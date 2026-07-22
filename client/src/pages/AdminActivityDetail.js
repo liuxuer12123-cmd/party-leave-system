@@ -18,6 +18,7 @@ export default function AdminActivityDetail() {
   const [editLeaveReason, setEditLeaveReason] = useState('');
   const [editLeaveFile, setEditLeaveFile] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   // Batch add modal state
   const [batchModal, setBatchModal] = useState(false);
@@ -129,16 +130,24 @@ export default function AdminActivityDetail() {
     setEditLeaveReason(p.leave_reason || '');
     setEditLeaveFile(null);
     setEditSaving(false);
+    setEditError('');
   };
 
   const handleEditSave = async () => {
+    setEditError('');
+
+    // Validate: leave status requires file and reason
+    if (editStatus === 'leave') {
+      if (!editLeaveReason) return setEditError('请假时必须选择请假事由');
+      if (!editLeaveFile && !editModal.leave_file_path) return setEditError('请假时必须上传请假条');
+    }
+
     setEditSaving(true);
     try {
       const will_attend = editStatus === 'leave' ? 0 : 1;
       const is_absent = editStatus === 'absent' ? 1 : 0;
 
-      if (editStatus === 'leave' && editLeaveFile) {
-        // Multipart upload for file
+      if (editLeaveFile) {
         const fd = new FormData();
         fd.append('will_attend', will_attend);
         fd.append('is_absent', is_absent);
@@ -322,8 +331,8 @@ export default function AdminActivityDetail() {
             {editStatus === 'leave' && (
               <>
                 <div style={{ marginBottom: 14 }}>
-                  <label style={labelStyle}>请假事由</label>
-                  <select value={editLeaveReason} onChange={e => setEditLeaveReason(e.target.value)} style={selectStyle}>
+                  <label style={labelStyle}>请假事由 <span style={{ color: '#d4380d' }}>*</span></label>
+                  <select value={editLeaveReason} onChange={e => { setEditLeaveReason(e.target.value); setEditError(''); }} style={selectStyle}>
                     <option value="">请选择</option>
                     {categories.map(c => (
                       <option key={c.id} value={c.name}>{c.name}</option>
@@ -331,13 +340,22 @@ export default function AdminActivityDetail() {
                   </select>
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={labelStyle}>上传请假单（选填）</label>
-                  <input type="file" onChange={e => setEditLeaveFile(e.target.files[0])}
+                  <label style={labelStyle}>上传请假条 <span style={{ color: '#d4380d' }}>*</span></label>
+                  <input type="file" onChange={e => { setEditLeaveFile(e.target.files[0]); setEditError(''); }}
                     accept=".docx,.doc,.pdf,.jpg,.jpeg,.png,.gif,.bmp"
                     style={{ fontSize: 13 }} />
-                  {editLeaveFile && <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{editLeaveFile.name}</div>}
+                  {editLeaveFile && <div style={{ fontSize: 12, color: '#52c41a', marginTop: 4 }}>新文件: {editLeaveFile.name}</div>}
+                  {!editLeaveFile && editModal.leave_file_path && (
+                    <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>当前: {editModal.leave_file_name || editModal.leave_file_path}</div>
+                  )}
                 </div>
               </>
+            )}
+
+            {editError && (
+              <div style={{ background: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 4, padding: '6px 10px', marginBottom: 12, color: '#cf1322', fontSize: 12 }}>
+                {editError}
+              </div>
             )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

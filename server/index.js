@@ -250,6 +250,14 @@ app.post('/api/members', (req, res) => {
   res.json(member);
 });
 
+// Update member info (admin)
+app.put('/api/members/:id', authRequired, (req, res) => {
+  const { student_id, phone } = req.body;
+  db.prepare('UPDATE members SET student_id = ?, phone = ? WHERE id = ?')
+    .run(student_id || '', phone || '', req.params.id);
+  res.json({ success: true });
+});
+
 // ── Participation routes (guest submit) ────────────────────
 app.post('/api/participations', upload.single('leave_file'), (req, res) => {
   const { activity_id, member_id, will_attend, leave_reason } = req.body;

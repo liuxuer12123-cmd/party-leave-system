@@ -21,6 +21,10 @@ export default function ActivityDetail() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return setError('请填写姓名');
+    if (!willAttend) {
+      if (!leaveReason) return setError('请假时必须选择请假事由');
+      if (!leaveFile) return setError('请假时必须上传请假条');
+    }
     setLoading(true);
     setError(null);
     try {
@@ -134,7 +138,7 @@ export default function ActivityDetail() {
             {!willAttend && (
               <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8, padding: isMobile ? 14 : 20, marginBottom: 24 }}>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={labelStyle}>请假事由分类</label>
+                  <label style={labelStyle}>请假事由分类 <span style="color: '#d4380d'">*</span></label>
                   <select value={leaveReason} onChange={e => setLeaveReason(e.target.value)} style={inputStyle}>
                     <option value="">请选择请假事由</option>
                     {categories.map(c => (
@@ -144,7 +148,7 @@ export default function ActivityDetail() {
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label style={labelStyle}>上传请假单</label>
+                  <label style={labelStyle}>上传请假单 <span style="color: '#d4380d'">*</span></label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <label style={{
                       display: 'inline-block', padding: '8px 16px', background: '#d4380d', color: '#fff',

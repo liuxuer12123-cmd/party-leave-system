@@ -5,10 +5,20 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip } from '
 
 export default function MemberDetail() {
   const { id } = useParams();
-  const { user, api, isMobile } = useApp();
+  const { user, api, isMobile, categories } = useApp();
   const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Edit modal state
+  const [editModal, setEditModal] = useState(null); // participation row
+  const [editStudentId, setEditStudentId] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editLeaveReason, setEditLeaveReason] = useState('');
+  const [editLeaveFile, setEditLeaveFile] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     if (!user) { navigate('/admin/login'); return; }
@@ -48,6 +58,65 @@ export default function MemberDetail() {
       await api.patch(`/participations/${pid}/toggle-absent`);
       loadDetail();
     } catch (e) { /* ignore */ }
+  };
+
+  // ── Edit participation ──
+  const openEdit = (p) => {
+    let status = 'attend';
+    if (p.is_absent) status = 'absent';
+    else if (!p.will_attend) status = 'leave';
+    setEditModal(p);
+    setEditStudentId(member.student_id || '');
+    setEditPhone(member.phone || '');
+    setEditStatus(status);
+    setEditLeaveReason(p.leave_reason || '');
+    setEditLeaveFile(null);
+    setEditSaving(false);
+    setEditError('');
+  };
+
+  const handleEditSave = async () => {
+    setEditError('');
+
+    // Validate: leave status requires file and reason
+    if (editStatus === 'leave') {
+      if (!editLeaveReason) return setEditError('请假时必须选择请假事由');
+      if (!editLeaveFile && !editModal.leave_file_path) return setEditError('请假时必须上传请假条');
+    }
+
+    setEditSaving(true);
+    try {
+      // Update member info
+      await api.put(`/members/${member.id}`, {
+        student_id: editStudentId,
+        phone: editPhone
+      });
+
+      // Update participation status
+      const will_attend = editStatus === 'leave' ? 0 : 1;
+      const is_absent = editStatus === 'absent' ? 1 : 0;
+
+      if (editLeaveFile) {
+        const fd = new FormData();
+        fd.append('will_attend', will_attend);
+        fd.append('is_absent', is_absent);
+        fd.append('leave_reason', editLeaveReason);
+        fd.append('leave_file', editLeaveFile);
+        await api.put(`/participations/${editModal.id}`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        await api.put(`/participations/${editModal.id}`, {
+          will_attend,
+          is_absent,
+          leave_reason: editLeaveReason
+        });
+      }
+
+      setEditModal(null);
+      loadDetail();
+    } catch (e) { alert('修改失败'); }
+    setEditSaving(false);
   };
 
   return (
@@ -163,7 +232,10 @@ export default function MemberDetail() {
                         </a>
                       ) : '-'}
                     </td>}
-                    <td style={{ padding: isMobile ? '8px 10px' : '10px 16px' }}>
+                    <td style={{ padding: isMobile ? '8px 10px' : '10px 16px', display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button onClick={() => openEdit(p)} style={{
+                        background: 'none', border: 'none', color: '#1677ff', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
+                      }}>编辑</button>
                       <button onClick={() => handleToggleAbsent(p.id)} style={{
                         background: 'none', border: 'none', color: p.is_absent ? '#52c41a' : '#fa8c16', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap'
                       }}>{p.is_absent ? '取消缺勤' : '标记缺勤'}</button>
@@ -175,6 +247,93 @@ export default function MemberDetail() {
           )}
         </div>
       </div>
+
+      {/* ── Edit Modal ── */}
+      {editModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setEditModal(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: 24, width: 460, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 4, fontSize: 16 }}>✏️ {member.name} — {editModal.activity_name}</h3>
+            <p style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>修改成员信息和参与状态</p>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle}>学号</label>
+              <input value={editStudentId} onChange={e => setEditStudentId(e.target.value)} style={inputStyle} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>电话</label>
+              <input value={editPhone} onChange={e => setEditPhone(e.target.value)} style={inputStyle} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>状态 <span style={{ color: '#d4380d' }}>*</span></label>
+              <select value={editStatus} onChange={e => { setEditStatus(e.target.value); setEditError(''); }} style={selectStyle}>
+                <option value="attend">✅ 参加</option>
+                <option value="leave">📝 请假</option>
+                <option value="absent">⚠️ 缺勤</option>
+              </select>
+            </div>
+
+            {editStatus === 'leave' && (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>请假事由 <span style={{ color: '#d4380d' }}>*</span></label>
+                  <select value={editLeaveReason} onChange={e => { setEditLeaveReason(e.target.value); setEditError(''); }} style={selectStyle}>
+                    <option value="">请选择</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>上传请假条 <span style={{ color: '#d4380d' }}>*</span></label>
+                  <input type="file" onChange={e => { setEditLeaveFile(e.target.files[0]); setEditError(''); }}
+                    accept=".docx,.doc,.pdf,.jpg,.jpeg,.png,.gif,.bmp"
+                    style={{ fontSize: 13 }} />
+                  {editLeaveFile && <div style={{ fontSize: 12, color: '#52c41a', marginTop: 4 }}>新文件: {editLeaveFile.name}</div>}
+                  {!editLeaveFile && editModal.leave_file_path && (
+                    <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>当前: {editModal.leave_file_name || editModal.leave_file_path}</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {editError && (
+              <div style={{ background: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 4, padding: '6px 10px', marginBottom: 12, color: '#cf1322', fontSize: 12 }}>
+                {editError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditModal(null)} style={{
+                padding: '6px 20px', background: '#fff', border: '1px solid #d9d9d9', borderRadius: 4,
+                cursor: 'pointer', fontSize: 13
+              }}>取消</button>
+              <button onClick={handleEditSave} disabled={editSaving} style={{
+                padding: '6px 20px', background: editSaving ? '#ccc' : '#d4380d', color: '#fff', border: 'none',
+                borderRadius: 4, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600
+              }}>{editSaving ? '保存中...' : '保存'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#262626', marginBottom: 5 };
+const inputStyle = {
+  width: '100%', padding: '8px 10px', border: '1px solid #d9d9d9', borderRadius: 4,
+  fontSize: 13, outline: 'none'
+};
+const selectStyle = {
+  width: '100%', padding: '8px 10px', border: '1px solid #d9d9d9', borderRadius: 4,
+  fontSize: 13, outline: 'none', background: '#fff'
+};
