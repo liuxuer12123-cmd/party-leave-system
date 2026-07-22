@@ -34,8 +34,7 @@ export default function AdminDashboard() {
 
   const attendRate = totalParticipations > 0 ? Math.round((totalAttending / totalParticipations) * 100) : 0;
   const leaveRate = totalParticipations > 0 ? Math.round((totalOnLeave / totalParticipations) * 100) : 0;
-  const absentBase = totalParticipations - totalOnLeave;
-  const absentRate = absentBase > 0 ? Math.round((totalAbsent / absentBase) * 100) : 0;
+  const absentRate = totalParticipations > 0 ? Math.round((totalAbsent / totalParticipations) * 100) : 0;
 
   const pieData = [
     { name: '参加', value: totalAttending },
@@ -55,7 +54,7 @@ export default function AdminDashboard() {
         <StatCard label="活动总数" value={totalActivities} color="#d4380d" icon="📋" isMobile={isMobile} />
         <StatCard label="出勤率" value={`${attendRate}%`} color="#52c41a" icon="✅" isMobile={isMobile} />
         <StatCard label="请假率" value={`${leaveRate}%`} color="#ff4d4f" icon="📝" isMobile={isMobile} />
-        <StatCard label="缺勤率" value={`${absentRate}%`} color="#fa8c16" icon="⚠️" sub="不含请假" isMobile={isMobile} />
+        <StatCard label="缺勤率" value={`${absentRate}%`} color="#fa8c16" icon="⚠️" isMobile={isMobile} />
       </div>
 
       <div style={{
