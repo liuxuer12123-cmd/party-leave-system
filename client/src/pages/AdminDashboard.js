@@ -32,6 +32,11 @@ export default function AdminDashboard() {
   const totalOnLeave = stats.reduce((s, a) => s + a.onLeave, 0);
   const totalAbsent = stats.reduce((s, a) => s + (a.absent || 0), 0);
 
+  const attendRate = totalParticipations > 0 ? Math.round((totalAttending / totalParticipations) * 100) : 0;
+  const leaveRate = totalParticipations > 0 ? Math.round((totalOnLeave / totalParticipations) * 100) : 0;
+  const absentBase = totalParticipations - totalOnLeave;
+  const absentRate = absentBase > 0 ? Math.round((totalAbsent / absentBase) * 100) : 0;
+
   const pieData = [
     { name: '参加', value: totalAttending },
     { name: '请假', value: totalOnLeave },
@@ -44,14 +49,13 @@ export default function AdminDashboard() {
       <h2 style={{ fontSize: isMobile ? 16 : 18, marginBottom: isMobile ? 14 : 20 }}>📊 管理总览</h2>
 
       <div style={{
-        display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
+        display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
         gap: isMobile ? 8 : 16, marginBottom: isMobile ? 16 : 24
       }}>
         <StatCard label="活动总数" value={totalActivities} color="#d4380d" icon="📋" isMobile={isMobile} />
-        <StatCard label="参与总人次" value={totalParticipations} color="#1677ff" icon="👥" isMobile={isMobile} />
-        <StatCard label="参加人数" value={totalAttending} color="#52c41a" icon="✅" isMobile={isMobile} />
-        <StatCard label="请假人数" value={totalOnLeave} color="#ff4d4f" icon="📝" isMobile={isMobile} />
-        <StatCard label="缺勤人数" value={totalAbsent} color="#fa8c16" icon="⚠️" isMobile={isMobile} />
+        <StatCard label="出勤率" value={`${attendRate}%`} color="#52c41a" icon="✅" isMobile={isMobile} />
+        <StatCard label="请假率" value={`${leaveRate}%`} color="#ff4d4f" icon="📝" isMobile={isMobile} />
+        <StatCard label="缺勤率" value={`${absentRate}%`} color="#fa8c16" icon="⚠️" sub="不含请假" isMobile={isMobile} />
       </div>
 
       <div style={{
@@ -127,7 +131,7 @@ export default function AdminDashboard() {
   );
 }
 
-function StatCard({ label, value, color, icon, isMobile }) {
+function StatCard({ label, value, color, icon, sub, isMobile }) {
   return (
     <div style={{
       background: '#fff', borderRadius: 8, padding: isMobile ? '12px 14px' : '20px 24px',
@@ -135,6 +139,7 @@ function StatCard({ label, value, color, icon, isMobile }) {
     }}>
       <div style={{ fontSize: isMobile ? 11 : 13, color: '#999', marginBottom: isMobile ? 4 : 8 }}>{icon} {label}</div>
       <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
