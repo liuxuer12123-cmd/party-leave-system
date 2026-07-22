@@ -34,7 +34,7 @@ export default function AdminDashboard() {
 
   const attendRate = totalParticipations > 0 ? Math.round((totalAttending / totalParticipations) * 100) : 0;
   const leaveRate = totalParticipations > 0 ? Math.round((totalOnLeave / totalParticipations) * 100) : 0;
-  const absentRate = totalParticipations > 0 ? Math.round((totalAbsent / totalParticipations) * 100) : 0;
+  const absentRate = 100 - attendRate - leaveRate;
 
   const pieData = [
     { name: '参加', value: totalAttending },
