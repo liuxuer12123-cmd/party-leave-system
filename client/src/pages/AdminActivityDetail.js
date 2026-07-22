@@ -5,12 +5,26 @@ import * as XLSX from 'xlsx';
 
 export default function AdminActivityDetail() {
   const { id } = useParams();
-  const { user, api, activities, isMobile } = useApp();
+  const { user, api, activities, categories, isMobile } = useApp();
   const navigate = useNavigate();
   const activity = activities.find(a => a.id === id);
   const [participations, setParticipations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [zipLoading, setZipLoading] = useState(false);
+
+  // Edit modal state
+  const [editModal, setEditModal] = useState(null); // { pid, will_attend, leave_reason, is_absent, member_name }
+  const [editStatus, setEditStatus] = useState('');
+  const [editLeaveReason, setEditLeaveReason] = useState('');
+  const [editLeaveFile, setEditLeaveFile] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Batch add modal state
+  const [batchModal, setBatchModal] = useState(false);
+  const [batchNames, setBatchNames] = useState('');
+  const [batchStatus, setBatchStatus] = useState('attend');
+  const [batchLeaveReason, setBatchLeaveReason] = useState('');
+  const [batchSaving, setBatchSaving] = useState(false);
 
   useEffect(() => {
     if (!user) { navigate('/admin/login'); return; }
@@ -105,6 +119,68 @@ export default function AdminActivityDetail() {
     } catch (e) { alert('操作失败'); }
   };
 
+  // ── Edit participation ──
+  const openEdit = (p) => {
+    let status = 'attend';
+    if (p.is_absent) status = 'absent';
+    else if (!p.will_attend) status = 'leave';
+    setEditModal(p);
+    setEditStatus(status);
+    setEditLeaveReason(p.leave_reason || '');
+    setEditLeaveFile(null);
+    setEditSaving(false);
+  };
+
+  const handleEditSave = async () => {
+    setEditSaving(true);
+    try {
+      const will_attend = editStatus === 'leave' ? 0 : 1;
+      const is_absent = editStatus === 'absent' ? 1 : 0;
+
+      if (editStatus === 'leave' && editLeaveFile) {
+        // Multipart upload for file
+        const fd = new FormData();
+        fd.append('will_attend', will_attend);
+        fd.append('is_absent', is_absent);
+        fd.append('leave_reason', editLeaveReason);
+        fd.append('leave_file', editLeaveFile);
+        await api.put(`/participations/${editModal.id}`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      } else {
+        await api.put(`/participations/${editModal.id}`, {
+          will_attend,
+          is_absent,
+          leave_reason: editLeaveReason
+        });
+      }
+      setEditModal(null);
+      loadData();
+    } catch (e) { alert('修改失败'); }
+    setEditSaving(false);
+  };
+
+  // ── Batch add ──
+  const handleBatchSave = async () => {
+    const names = batchNames.split('\n').map(n => n.trim()).filter(Boolean);
+    if (names.length === 0) return alert('请至少输入一个姓名');
+    setBatchSaving(true);
+    try {
+      const { data } = await api.post(`/activities/${id}/participations/batch`, {
+        names,
+        will_attend: batchStatus,
+        leave_reason: batchStatus === 'leave' ? batchLeaveReason : ''
+      });
+      setBatchModal(false);
+      setBatchNames('');
+      setBatchStatus('attend');
+      setBatchLeaveReason('');
+      loadData();
+      alert(`成功新增 ${data.count} 名成员（${names.length - data.count} 名已存在被跳过）`);
+    } catch (e) { alert('批量新增失败'); }
+    setBatchSaving(false);
+  };
+
   const cardStyle = isMobile
     ? { fontSize: 16, fontWeight: 700 }
     : { fontSize: 24, fontWeight: 700 };
@@ -131,6 +207,10 @@ export default function AdminActivityDetail() {
               padding: isMobile ? '6px 12px' : '8px 20px', background: zipLoading ? '#ccc' : '#1677ff', color: '#fff', border: 'none',
               borderRadius: 6, cursor: zipLoading ? 'not-allowed' : 'pointer', fontSize: isMobile ? 11 : 13, fontWeight: 600, whiteSpace: 'nowrap'
             }}>{zipLoading ? '打包中...' : '📦 全部请假单'}</button>
+            <button onClick={() => setBatchModal(true)} style={{
+              padding: isMobile ? '6px 12px' : '8px 20px', background: '#722ed1', color: '#fff', border: 'none',
+              borderRadius: 6, cursor: 'pointer', fontSize: isMobile ? 11 : 13, fontWeight: 600, whiteSpace: 'nowrap'
+            }}>＋ 批量新增</button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: isMobile ? 12 : 24, marginTop: 16, flexWrap: 'wrap' }}>
@@ -202,6 +282,9 @@ export default function AdminActivityDetail() {
                     ) : '-'}
                   </td>
                   <td style={{ padding: isMobile ? '8px 8px' : '10px 16px', display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => openEdit(p)} style={{
+                      background: 'none', border: 'none', color: '#1677ff', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap'
+                    }}>编辑</button>
                     <button onClick={() => handleToggleAbsent(p.id)} style={{
                       background: 'none', border: 'none', color: p.is_absent ? '#52c41a' : '#fa8c16', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap'
                     }}>{p.is_absent ? '取消缺勤' : '标记缺勤'}</button>
@@ -213,6 +296,125 @@ export default function AdminActivityDetail() {
           </table>
         )}
       </div>
+
+      {/* ── Edit Modal ── */}
+      {editModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setEditModal(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: 24, width: 440, maxWidth: '90vw',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 16, fontSize: 16 }}>✏️ 修改状态 — {editModal.member_name}</h3>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>状态</label>
+              <select value={editStatus} onChange={e => setEditStatus(e.target.value)} style={selectStyle}>
+                <option value="attend">✅ 参加</option>
+                <option value="leave">📝 请假</option>
+                <option value="absent">⚠️ 缺勤</option>
+              </select>
+            </div>
+
+            {editStatus === 'leave' && (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>请假事由</label>
+                  <select value={editLeaveReason} onChange={e => setEditLeaveReason(e.target.value)} style={selectStyle}>
+                    <option value="">请选择</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>上传请假单（选填）</label>
+                  <input type="file" onChange={e => setEditLeaveFile(e.target.files[0])}
+                    accept=".docx,.doc,.pdf,.jpg,.jpeg,.png,.gif,.bmp"
+                    style={{ fontSize: 13 }} />
+                  {editLeaveFile && <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{editLeaveFile.name}</div>}
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditModal(null)} style={{
+                padding: '6px 20px', background: '#fff', border: '1px solid #d9d9d9', borderRadius: 4,
+                cursor: 'pointer', fontSize: 13
+              }}>取消</button>
+              <button onClick={handleEditSave} disabled={editSaving} style={{
+                padding: '6px 20px', background: editSaving ? '#ccc' : '#d4380d', color: '#fff', border: 'none',
+                borderRadius: 4, cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600
+              }}>{editSaving ? '保存中...' : '保存'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Add Modal ── */}
+      {batchModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setBatchModal(false)}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: 24, width: 480, maxWidth: '90vw',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 4, fontSize: 16 }}>＋ 批量新增成员</h3>
+            <p style={{ fontSize: 12, color: '#999', marginBottom: 14 }}>每行一个姓名，已存在的成员会自动跳过</p>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>成员姓名</label>
+              <textarea value={batchNames} onChange={e => setBatchNames(e.target.value)}
+                placeholder={"张三\n李四\n王五"}
+                style={{ ...selectStyle, height: 120, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>统一状态</label>
+              <select value={batchStatus} onChange={e => setBatchStatus(e.target.value)} style={selectStyle}>
+                <option value="attend">✅ 参加</option>
+                <option value="leave">📝 请假</option>
+                <option value="absent">⚠️ 缺勤</option>
+              </select>
+            </div>
+
+            {batchStatus === 'leave' && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>请假事由</label>
+                <select value={batchLeaveReason} onChange={e => setBatchLeaveReason(e.target.value)} style={selectStyle}>
+                  <option value="">请选择</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setBatchModal(false)} style={{
+                padding: '6px 20px', background: '#fff', border: '1px solid #d9d9d9', borderRadius: 4,
+                cursor: 'pointer', fontSize: 13
+              }}>取消</button>
+              <button onClick={handleBatchSave} disabled={batchSaving} style={{
+                padding: '6px 20px', background: batchSaving ? '#ccc' : '#722ed1', color: '#fff', border: 'none',
+                borderRadius: 4, cursor: batchSaving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600
+              }}>{batchSaving ? '新增中...' : '确认新增'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#262626', marginBottom: 5 };
+const selectStyle = {
+  width: '100%', padding: '8px 10px', border: '1px solid #d9d9d9', borderRadius: 4,
+  fontSize: 13, outline: 'none', background: '#fff'
+};

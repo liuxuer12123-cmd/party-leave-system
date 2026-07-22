@@ -312,14 +312,35 @@ app.get('/api/activities/:id/participations', authRequired, (req, res) => {
   res.json(rows);
 });
 
-app.put('/api/participations/:id', authRequired, (req, res) => {
+app.put('/api/participations/:id', authRequired, upload.single('leave_file'), (req, res) => {
   const { will_attend, leave_reason, status, is_absent } = req.body;
   const updates = [];
   const params = [];
-  if (will_attend !== undefined) { updates.push('will_attend = ?'); params.push(will_attend ? 1 : 0); }
+
+  if (will_attend !== undefined) {
+    // will_attend can be string "true"/"false" or number 1/0
+    const val = will_attend === 'true' || will_attend === true || will_attend === '1' || will_attend === 1 ? 1 : 0;
+    updates.push('will_attend = ?'); params.push(val);
+  }
   if (leave_reason !== undefined) { updates.push('leave_reason = ?'); params.push(leave_reason); }
   if (status !== undefined) { updates.push('status = ?'); params.push(status); }
-  if (is_absent !== undefined) { updates.push('is_absent = ?'); params.push(is_absent ? 1 : 0); }
+  if (is_absent !== undefined) {
+    const val = is_absent === 'true' || is_absent === true || is_absent === '1' || is_absent === 1 ? 1 : 0;
+    updates.push('is_absent = ?'); params.push(val);
+  }
+
+  // Handle file upload for status change (admin editing participation)
+  if (req.file) {
+    const p = db.prepare(`
+      SELECT m.name as member_name FROM participations p
+      JOIN members m ON m.id = p.member_id WHERE p.id = ?
+    `).get(req.params.id);
+    const ext = path.extname(req.file.originalname);
+    const leaveFileName = `${p && p.member_name ? p.member_name : '未知'}_请假条${ext}`;
+    updates.push('leave_file_path = ?'); params.push(req.file.filename);
+    updates.push('leave_file_name = ?'); params.push(leaveFileName);
+  }
+
   if (updates.length === 0) return res.status(400).json({ error: '没有要更新的字段' });
   params.push(req.params.id);
   db.prepare(`UPDATE participations SET ${updates.join(', ')} WHERE id = ?`).run(...params);
@@ -342,6 +363,57 @@ app.delete('/api/participations/:id', authRequired, (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
   db.prepare('DELETE FROM participations WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// Batch add participations for an activity (admin)
+app.post('/api/activities/:id/participations/batch', authRequired, (req, res) => {
+  const { names, will_attend, leave_reason } = req.body;
+  // names can be string (newline-separated) or array
+  const nameList = Array.isArray(names)
+    ? names.map(n => n.trim()).filter(Boolean)
+    : (names || '').split('\n').map(n => n.trim()).filter(Boolean);
+
+  if (nameList.length === 0) return res.status(400).json({ error: '请至少输入一个姓名' });
+
+  const insertMember = db.prepare('INSERT INTO members (id, name) VALUES (?,?)');
+  const insertPart = db.prepare('INSERT INTO participations (id, activity_id, member_id, will_attend, leave_reason, is_absent) VALUES (?,?,?,?,?,?)');
+  const checkExisting = db.prepare('SELECT id FROM participations WHERE activity_id = ? AND member_id = ?');
+
+  const results = [];
+  for (const name of nameList) {
+    // Find or create member
+    let member = db.prepare('SELECT * FROM members WHERE name = ?').get(name);
+    if (!member) {
+      const mid = uuidv4();
+      insertMember.run(mid, name);
+      member = { id: mid };
+    }
+    // Skip duplicate
+    if (checkExisting.get(req.params.id, member.id)) continue;
+
+    const pid = uuidv4();
+    // will_attend: 'attend'=参加, 'leave'=请假, 'absent'=缺勤
+    const attending = will_attend === 'leave' ? 0 : 1;
+    const absent = will_attend === 'absent' ? 1 : 0;
+    insertPart.run(pid, req.params.id, member.id, attending, leave_reason || '', absent);
+    results.push({ name, id: pid });
+  }
+
+  res.json({ count: results.length, results });
+});
+
+// Delete member and all their participations (admin)
+app.delete('/api/admin/members/:id', authRequired, (req, res) => {
+  const parts = db.prepare('SELECT leave_file_path FROM participations WHERE member_id = ?').all(req.params.id);
+  for (const p of parts) {
+    if (p.leave_file_path) {
+      const filePath = path.join(__dirname, 'uploads', p.leave_file_path);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+  }
+  db.prepare('DELETE FROM participations WHERE member_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM members WHERE id = ?').run(req.params.id);
   res.json({ success: true });
 });
 

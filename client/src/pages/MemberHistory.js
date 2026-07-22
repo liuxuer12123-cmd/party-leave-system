@@ -23,6 +23,14 @@ export default function MemberHistory() {
     setLoading(false);
   };
 
+  const handleDeleteMember = async (mid, name) => {
+    if (!window.confirm(`确定删除成员「${name}」吗？该成员的所有参与记录也将被删除。`)) return;
+    try {
+      await api.delete(`/admin/members/${mid}`);
+      loadMembers();
+    } catch (e) { alert('删除失败'); }
+  };
+
   const handleExport = async () => {
     try {
       const { data } = await api.get('/admin/export', { params: { type: 'member' } });
@@ -114,8 +122,9 @@ export default function MemberHistory() {
                         <span style={{ fontSize: 12, color: '#666', minWidth: 36 }}>{rate}%</span>
                       </div>
                     </td>}
-                    <td style={{ padding: '10px 16px' }}>
+                    <td style={{ padding: '10px 16px', display: 'flex', gap: 8, alignItems: 'center' }}>
                       <Link to={`/admin/member/${m.id}`} style={{ color: '#d4380d', fontSize: 13, textDecoration: 'none' }}>详情</Link>
+                      <button onClick={() => handleDeleteMember(m.id, m.name)} style={{ background: 'none', border: 'none', color: '#ff4d4f', fontSize: 12, cursor: 'pointer' }}>删除</button>
                     </td>
                   </tr>
                 );

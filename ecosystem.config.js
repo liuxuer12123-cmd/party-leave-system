@@ -2,7 +2,7 @@ module.exports = {
   apps: [{
     name: 'party-leave-system',
     script: 'server/index.js',
-    cwd: 'C:\\party-leave-system',
+    cwd: '/opt/party-leave-system',
     env: {
       NODE_ENV: 'production',
       PORT: 3001,
@@ -13,8 +13,8 @@ module.exports = {
     max_memory_restart: '500M',
     // 日志配置
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
-    error_file: '.\\logs\\err.log',
-    out_file: '.\\logs\\out.log',
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
     merge_logs: true
   }]
 };
